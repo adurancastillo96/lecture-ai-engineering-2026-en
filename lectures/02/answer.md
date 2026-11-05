@@ -2,7 +2,7 @@
 
 ## Exercises
 
-- Model and settings used (from `config` in `result.json`): check out the folder notebooks/submission_exercise/result.json
+- Model and settings used (from `config` in `result.json`): check out the file lectures/02/submission_exercise/result.json
     - Base model: `Qwen/Qwen3.5-0.8B`
     - Revision: `2fc06364715b967f1860aea9cf38778875588b17`
     - Seed: `42`
