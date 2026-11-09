@@ -39,7 +39,7 @@
   * **Tool calls & arguments**: The model respected the modified docstring and batched both terms into a single query: `search_glossary({'query': 'LoRA, QLoRA'})`.
   * **Number of tool calls**: Dropped from 2 calls down to 1 (`tool_calls=1`).
   * **LLM requests & tokens**: Remained at `requests=2` (1 request to invoke the tool and 1 request to produce the final response). Input text tokens decreased from 1,125 to 1,041, resulting in lower cost (`cost=Decimal('0.00064875')`).
-  * **Answer quality**: 
+  * **Answer quality**: In a single search call, the tool found and returned definitions for both terms. The agent then used those definitions to write a clear, accurate comparison and included the correct citation for `(Lecture 02)`.
 
 - Observations and questions:
   * The tool docstring serves as the primary interface description and behavioral guideline for the LLM. 
