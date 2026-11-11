@@ -39,12 +39,81 @@
   * **Tool calls & arguments**: The model respected the modified docstring and batched both terms into a single query: `search_glossary({'query': 'LoRA, QLoRA'})`.
   * **Number of tool calls**: Dropped from 2 calls down to 1 (`tool_calls=1`).
   * **LLM requests & tokens**: Remained at `requests=2` (1 request to invoke the tool and 1 request to produce the final response). Input text tokens decreased from 1,125 to 1,041, resulting in lower cost (`cost=Decimal('0.00064875')`).
-  * **Answer quality**: In a single search call, the tool found and returned definitions for both terms. The agent then used those definitions to write a clear, accurate comparison and included the correct citation for `(Lecture 02)`.
+  * **Answer quality**: In a single search call, the tool found and returned definitions for both terms. The agent then used those definitions to write a clear, accurate comparison and included the correct citation for `(Lecture 02)`. Note!: I modified `print_trace(result)` function to visualize how many terms were fletched from `glossary.json` in that single call and fed into the model.
 
 - Observations and questions:
   * The tool docstring serves as the primary interface description and behavioral guideline for the LLM. 
   * By modifying only one sentence in the docstring, the agent shifted from invoking separate parallel tool calls to a single batch call. This demonstrates that tool descriptions can be intentionally engineered to optimize token usage, reduce tool invocations, and lower execution costs.
 
+### Implementation Level
+
+- Level attempted: Implementation
+
+- What you did:
+  * Created `save_learning_log(topic: str, content: str) -> str` in `app/tools.py` to write study records to files in `learning_log/`.
+  * Configured `Agent` in `app/agent.py` with `output_type=[str, DeferredToolRequests]` and registered `save_learning_log` with `requires_approval=True`.
+  * Updated CLI execution in `main()` of `app/agent.py` to detect `DeferredToolRequests`, display the requested tool name and arguments, prompt the user for confirmation (`[y/N]`), and resume the agent loop with `DeferredToolResults` via `run_sync`.
+
+- Results:
+  * **When approved (`y`)**: The agent paused before executing `save_learning_log`, prompted for confirmation, and upon entering `y`, executed the tool and wrote the learning summary to `learning_log/LOG_NAME.txt`.
+  * **When denied (`n`)**: The agent paused for confirmation, and upon entering `n`, passed `False` approval back to the agent loop. Pydantic AI returned `The tool call was denied.`, and no file was written to disk.
+  * **Automated testing**: `uv run pytest -q` passed 15/15 tests cleanly.
+
+- Observations and questions:
+  * Human-in-the-loop (HITL) tool approval provides an essential security and safety guardrail for irreversible operations (like file writes or database modifications).
+  * Pydantic AI's two-step `DeferredToolRequests` / `DeferredToolResults` mechanism allows pausing and resuming multi-turn tool calling without losing conversation state (`message_history`).
+
+- Log:
+```
+❯ uv run python -m app.agent --trace "What is the difference between LoRA and      
+    QLoRA?. Give me one review question and save the log."
+[model] gemini-3.1-flash-lite
+                 pydantic-ai v2.57.0 • Python 3.14.3
+
+       / \        agent: target model: google:gemini-3.1-flash-liteoutput: str | DeferredToolRequests
+     /   \         tools: 4 • capabilities: 0
+   /___.___\
+  /    |    \    observability: off — see every model and tool call live, with cost
+/      |      \    set it up free with Logfire and a GitHub login: https://pydantic.dev/ai-setup.md
+`---.._|_..---'    or use any OpenTelemetry backend: https://pydantic.dev/docs/ai/logfire/#otel
+
+                 goes away once observability is on — or PYDANTIC_AI_NO_BANNER=1
+
+[Tool Approval Required] Tool: save_learning_log
+Arguments: {
+  "content": "The user learned about the differences between LoRA (Low-Rank Adaptation) and QLoRA (Quantized Low-Rank Adaptation). They also received a review question regarding Lecture 02.",
+  "topic": "LoRA vs QLoRA and review quiz"
+}
+Do you approve executing this tool? [y/N]: y
+To understand the difference, consider how both methods approach memory efficiency during fine-tuning:
+
+-   **LoRA (Low-Rank Adaptation):** This method focuses on efficiency by freezing the pre-trained model weights and injecting small, trainable "adapter" matrices into the architecture. Instead of updating all billions of parameters, you only train these small matrices, significantly reducing the number of trainable parameters.
+
+-   **QLoRA (Quantized LoRA):** This builds on top of LoRA by adding **quantization**. It compresses the base model's weights to a lower precision (such as 4-bit) before applying LoRA. This dramatically reduces the memory footprint required to load the model, allowing you to fine-tune much larger models on consumer-grade hardware.
+
+
+**Think about it this way:** LoRA reduces the number of parameters you need to update, while QLoRA additionally reduces the amount of memory needed to store the base model itself.
+
+***
+
+### Review Question for Lecture 02
+**Question:** What does "Learning rate" mean in the context of Lecture 02?
+**Answer:** A hyperparameter that determines how far parameters move in one update. Too large a value makes training unstable; too small a value slows progress.
+
+***
+I have saved this progress to your learning log.
+
+(Lecture 02)
+
+--- trace ---
+[tool call]   search_glossary({'query': 'LoRA, QLoRA'})
+[tool return] [found terms: 'LoRA' (Lecture 2), 'QLoRA' (Lecture 2)] ; search_glossary -> [{"term": "LoRA", "lecture": 2, "definition": "A PEFT method that freezes pretrained weights, represents weight updates …
+[tool call]   make_quiz({'lecture': 2})
+[tool return] ; make_quiz -> {"question": "What does 'Learning rate' mean in the context of Lecture 02?", "answer": "A hyperparameter that determines…
+[tool call]   save_learning_log({'content': 'The user learned about the differences between LoRA (Low-Rank Adaptation) and QLoRA (Quantized Low-Rank Adaptation). They also received a review question regarding Lecture 02.', 'topic': 'LoRA vs QLoRA and review quiz'})
+[tool return] ; save_learning_log -> Successfully saved learning record for 'LoRA vs QLoRA and review quiz' to learning_log/LoRAvsQLoRAandreviewquiz.txt.…
+[usage] RunUsage(cost=Decimal('0.0006580'), details={'text_prompt_tokens': 958}, input_text_tokens=958, input_tokens=958, output_tokens=279, requests=4, tool_calls=3)
+```
 
 
 

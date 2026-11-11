@@ -100,3 +100,15 @@ def make_quiz(lecture: int) -> str:
         },
         ensure_ascii=False,
     )
+
+def save_learning_log(topic: str, content: str) -> str:
+    """Save a learning record or summary into the learning_log/ directory.
+
+    Use when the user asks to save, record, or log what they learned or their study progress.
+    """
+    log_dir = Path(__file__).resolve().parent.parent / "learning_log"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    clean_topic = "".join(c for c in topic if c.isalnum() or c in ("-", "_")).strip() or "learning_log"
+    file_path = log_dir / f"{clean_topic}.txt"
+    file_path.write_text(content, encoding="utf-8")
+    return f"Successfully saved learning record for '{topic}' to learning_log/{file_path.name}."
