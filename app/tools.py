@@ -5,6 +5,7 @@ Rewriting descriptions changes whether the model uses a tool and which arguments
 """
 
 import json
+import random
 from functools import cache
 from pathlib import Path
 
@@ -32,7 +33,7 @@ def search_glossary(query: str) -> str:
     """Search the course glossary and return definitions and the sessions that cover the terms.
 
     Use before answering about AI engineering terms or words specific to this course (AIE2026).
-    Put only one term to look up in query (for example, "LoRA").
+    Put SEVERAL terms together separated by commas in query (for example, "LoRA, QLoRA").
     """
     q = _normalize(query)
     if not q:
@@ -77,3 +78,37 @@ def get_lecture_summary(lecture: int) -> str:
         available = sorted(p.stem for p in (DATA_DIR / "lectures").glob("*.md"))
         return f"Key points for Lecture {lecture:02d} are not available yet. Available sessions: {', '.join(available)}"
     return path.read_text(encoding="utf-8")
+
+def make_quiz(lecture: int) -> str:
+    """Pick one term from the given lecture and return a review question and its answer.
+
+    Use when asked for review questions or quizzes, such as 'Give me a review question for Lecture 03'.
+    """
+    glossary = load_glossary()
+    terms = [e for e in glossary if e.get("lecture") == lecture]
+    if not terms:
+        return json.dumps({
+            "question": f"No terms found for Lecture {lecture:02d}.",
+            "answer": "N/A",
+        })
+
+    term = random.choice(terms)
+    return json.dumps(
+        {
+            "question": f"What does '{term['term']}' mean in the context of Lecture {lecture:02d}?",
+            "answer": term["definition"],
+        },
+        ensure_ascii=False,
+    )
+
+def save_learning_log(topic: str, content: str) -> str:
+    """Save a learning record or summary into the learning_log/ directory.
+
+    Use when the user asks to save, record, or log what they learned or their study progress.
+    """
+    log_dir = Path(__file__).resolve().parent.parent / "learning_log"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    clean_topic = "".join(c for c in topic if c.isalnum() or c in ("-", "_")).strip() or "learning_log"
+    file_path = log_dir / f"{clean_topic}.txt"
+    file_path.write_text(content, encoding="utf-8")
+    return f"Successfully saved learning record for '{topic}' to learning_log/{file_path.name}."

@@ -1,0 +1,1 @@
+The user learned about the differences between LoRA (Low-Rank Adaptation) and QLoRA (Quantized Low-Rank Adaptation). They also received a review question regarding Lecture 02.

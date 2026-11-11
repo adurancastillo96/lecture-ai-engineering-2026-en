@@ -16,7 +16,7 @@ import inspect
 import json
 from pathlib import Path
 
-from pydantic_ai import Agent
+from pydantic_ai import Agent, DeferredToolRequests, DeferredToolResults
 from pydantic_ai.exceptions import ModelHTTPError
 from fastmcp import Client
 from pydantic_ai.mcp import MCPToolset, StdioTransport
@@ -32,17 +32,19 @@ INSTRUCTIONS = """\
 You are a learning support agent for the AI Engineering Pilot Course (AIE2026).
 - Always check the glossary with search_glossary before answering about terms or course-specific information.
 - Use get_lecture_summary when asked about the content of a session.
+- Use make_quiz when asked for a review question or quiz about a lecture session.
+- Use save_learning_log when asked to save or log learning records or study progress.
 - If something is absent from the glossary, say "It is not in the glossary" instead of making assertions based on guesses.
 - End your answer by indicating the relevant session (Lecture NN).
 - Guide learners with hints on how to think, rather than writing homework answers for them.
 """
 
 # Pass the model at runtime (so tests can substitute TestModel without calling an API)
-agent = Agent(instructions=INSTRUCTIONS)
+agent = Agent(instructions=INSTRUCTIONS, output_type=[str, DeferredToolRequests])
 agent.tool_plain(tools.search_glossary)
 agent.tool_plain(tools.get_lecture_summary)
-
-# TODO(Lecture 03 exercise): create make_quiz in tools.py and register it here
+agent.tool_plain(tools.make_quiz)  # (Lecture 03 exercise): create make_quiz in tools.py and register it here
+agent.tool_plain(tools.save_learning_log, requires_approval=True)
 
 # Lecture 05: MCP server configuration file. Uses the same "mcpServers" format as Claude Desktop and Cursor
 MCP_CONFIG = Path(__file__).resolve().parent / "mcp_servers.json"
@@ -106,7 +108,15 @@ def print_trace(result) -> None:
             if isinstance(part, ToolCallPart):
                 print(f"[tool call]   {part.tool_name}({part.args})")
             elif isinstance(part, ToolReturnPart):
-                print(f"[tool return] {part.tool_name} -> {str(part.content)[:120]}…")
+                found_prefix = "" # to make sure terms were fetched from glossary.json (no hallucinations).
+                try:
+                    data = json.loads(part.content)
+                    if isinstance(data, list) and data and isinstance(data[0], dict) and "term" in data[0]:
+                        terms = [f"'{item.get('term')}' (Lecture {item.get('lecture')})" for item in data]
+                        found_prefix = f"[found terms: {', '.join(terms)}] "
+                except Exception:
+                    pass
+                print(f"[tool return] {found_prefix}; {part.tool_name} -> {str(part.content)[:120]}…")
     print(f"[usage] {result.usage}")
 
 
@@ -130,6 +140,19 @@ def main() -> None:
         print("[tools] MCP servers (app/mcp_servers.json)")
     try:
         result = target.run_sync(args.question, model=build_model())
+        if isinstance(result.output, DeferredToolRequests):
+            approvals = {}
+            for call in result.output.approvals:
+                print(f"\n[Tool Approval Required] Tool: {call.tool_name}")
+                print(f"Arguments: {json.dumps(call.args, ensure_ascii=False, indent=2)}")
+                ans = input("Do you approve executing this tool? [y/N]: ").strip().lower()
+                approvals[call.tool_call_id] = (ans == "y")
+            result = target.run_sync(
+                deferred_tool_results=DeferredToolResults(approvals=approvals),
+                message_history=result.all_messages(),
+                usage=result.usage,
+                model=build_model(),
+            )
     except ModelHTTPError as e:
         print(api_error_message(e.status_code, str(e.body)[:200]))
         raise SystemExit(1)
