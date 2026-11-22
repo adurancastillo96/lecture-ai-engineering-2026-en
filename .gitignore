@@ -15,3 +15,11 @@ learning_log/
 
 # Lecture 05: search databases regenerated from the materials
 .cache/rag/
+
+# IDE
+.idea/
+
+# Lecture 02: locally generated SFT datasets
+glossary_sft.jsonl
+lectures/02/baseline_exercise/
+lectures/02/hw_basic/
